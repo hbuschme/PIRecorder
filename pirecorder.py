@@ -1,7 +1,9 @@
 #! /usr/bin/python
 
+# PIRecorder.py -- Record parasocial interactions with audiovisual media
+# Copyright (C) 2013 Hendrik Buschmeier
 #
-# Qt example for VLC Python bindings
+# Initially based on Qt example for VLC Python bindings
 # Copyright (C) 2009-2010 the VideoLAN team
 #
 # This program is free software; you can redistribute it and/or modify
@@ -17,36 +19,39 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
-#
 
+from __future__ import division, print_function
+
+import os.path
 import sys
+import time
 import user
+
 import vlc
 from PyQt4 import QtGui, QtCore
 
-class Player(QtGui.QMainWindow):
-    """A simple Media Player using VLC and Qt
-    """
-    def __init__(self, master=None):
-        QtGui.QMainWindow.__init__(self, master)
-        self.setWindowTitle("Media Player")
+class PIRecorder(QtGui.QMainWindow):
+    """Parasocial Interaction Recorder."""
 
-        # creating a basic vlc instance
+    def __init__(self, master=None, participant_id='dummy', response_path='.'):
+        QtGui.QMainWindow.__init__(self, master)
+        self.setWindowTitle("PIRecorder")
+
         self.instance = vlc.Instance()
-        # creating an empty vlc media player
         self.mediaplayer = self.instance.media_player_new()
 
         self.createUI()
-        self.isPaused = False
+        self.pi_response_path = response_path
+        self.pi_response_id = participant_id
+        self.pi_response_file = None
+        self.video_start_time = 0
+        self.pi_response_counter = 0
 
     def createUI(self):
-        """Set up the user interface, signals & slots
-        """
         self.widget = QtGui.QWidget(self)
         self.setCentralWidget(self.widget)
 
-        # In this widget, the video will be drawn
-        if sys.platform == "darwin": # for MacOS
+        if sys.platform == "darwin":
             self.videoframe = QtGui.QMacCocoaViewContainer(0)
         else:
             self.videoframe = QtGui.QFrame()
@@ -56,142 +61,61 @@ class Player(QtGui.QMainWindow):
         self.videoframe.setPalette(self.palette)
         self.videoframe.setAutoFillBackground(True)
 
-        self.positionslider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
-        self.positionslider.setToolTip("Position")
-        self.positionslider.setMaximum(1000)
-        self.connect(self.positionslider,
-                     QtCore.SIGNAL("sliderMoved(int)"), self.setPosition)
-
         self.hbuttonbox = QtGui.QHBoxLayout()
         self.playbutton = QtGui.QPushButton("Play")
         self.hbuttonbox.addWidget(self.playbutton)
         self.connect(self.playbutton, QtCore.SIGNAL("clicked()"),
-                     self.PlayPause)
-
-        self.stopbutton = QtGui.QPushButton("Stop")
-        self.hbuttonbox.addWidget(self.stopbutton)
-        self.connect(self.stopbutton, QtCore.SIGNAL("clicked()"),
-                     self.Stop)
-
-        self.hbuttonbox.addStretch(1)
-        self.volumeslider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
-        self.volumeslider.setMaximum(100)
-        self.volumeslider.setValue(self.mediaplayer.audio_get_volume())
-        self.volumeslider.setToolTip("Volume")
-        self.hbuttonbox.addWidget(self.volumeslider)
-        self.connect(self.volumeslider,
-                     QtCore.SIGNAL("valueChanged(int)"),
-                     self.setVolume)
+                     self.Play)
 
         self.vboxlayout = QtGui.QVBoxLayout()
         self.vboxlayout.addWidget(self.videoframe)
-        self.vboxlayout.addWidget(self.positionslider)
         self.vboxlayout.addLayout(self.hbuttonbox)
 
         self.widget.setLayout(self.vboxlayout)
 
-        open = QtGui.QAction("&Open", self)
-        self.connect(open, QtCore.SIGNAL("triggered()"), self.OpenFile)
-        exit = QtGui.QAction("&Exit", self)
-        self.connect(exit, QtCore.SIGNAL("triggered()"), sys.exit)
-        menubar = self.menuBar()
-        filemenu = menubar.addMenu("&File")
-        filemenu.addAction(open)
-        filemenu.addSeparator()
-        filemenu.addAction(exit)
+    def keyPressEvent(self, event):
+        if self.video_start_time == 0:
+            return
+        if not event.isAutoRepeat(): 
+            self.pi_response_counter += 1
+            response_time = time.time() - self.video_start_time
+            self.pi_response_file.write('{}, {}, {}\n'.format(self.pi_response_counter, response_time, event.key()))
+            self.pi_response_file.flush()
 
-        self.timer = QtCore.QTimer(self)
-        self.timer.setInterval(200)
-        self.connect(self.timer, QtCore.SIGNAL("timeout()"),
-                     self.updateUI)
-
-    def PlayPause(self):
-        """Toggle play/pause status
-        """
-        if self.mediaplayer.is_playing():
-            self.mediaplayer.pause()
-            self.playbutton.setText("Play")
-            self.isPaused = True
-        else:
-            if self.mediaplayer.play() == -1:
-                self.OpenFile()
-                return
-            self.mediaplayer.play()
-            self.playbutton.setText("Pause")
-            self.timer.start()
-            self.isPaused = False
-
-    def Stop(self):
-        """Stop player
-        """
-        self.mediaplayer.stop()
-        self.playbutton.setText("Play")
+    def Play(self):
+        """play"""
+        self.mediaplayer.play()
+        self.video_start_time = time.time()
+        self.playbutton.setVisible(False)
 
     def OpenFile(self, filename=None):
-        """Open a media file in a MediaPlayer
-        """
         if filename is None:
             filename = QtGui.QFileDialog.getOpenFileName(self, "Open File", user.home)
         if not filename:
-            return
+            sys.exit(-1)
 
-        # create the media
         self.media = self.instance.media_new(unicode(filename))
-        # put the media in the media player
         self.mediaplayer.set_media(self.media)
-
-        # parse the metadata of the file
         self.media.parse()
-        # set the title of the track as window title
-        self.setWindowTitle(self.media.get_meta(0))
 
-        # the media player has to be 'connected' to the QFrame
-        # (otherwise a video would be displayed in it's own window)
-        # this is platform specific!
-        # you have to give the id of the QFrame (or similar object) to
-        # vlc, different platforms have different functions for this
         if sys.platform == "linux2": # for Linux using the X Server
             self.mediaplayer.set_xwindow(self.videoframe.winId())
         elif sys.platform == "win32": # for Windows
             self.mediaplayer.set_hwnd(self.videoframe.winId())
         elif sys.platform == "darwin": # for MacOS
             self.mediaplayer.set_nsobject(self.videoframe.winId())
-        self.PlayPause()
 
-    def setVolume(self, Volume):
-        """Set the volume
-        """
-        self.mediaplayer.audio_set_volume(Volume)
-
-    def setPosition(self, position):
-        """Set the position
-        """
-        # setting the position to where the slider was dragged
-        self.mediaplayer.set_position(position / 1000.0)
-        # the vlc MediaPlayer needs a float value between 0 and 1, Qt
-        # uses integer variables, so you need a factor; the higher the
-        # factor, the more precise are the results
-        # (1000 should be enough)
-
-    def updateUI(self):
-        """updates the user interface"""
-        # setting the slider to the desired position
-        self.positionslider.setValue(self.mediaplayer.get_position() * 1000)
-
-        if not self.mediaplayer.is_playing():
-            # no need to call this function if nothing is played
-            self.timer.stop()
-            if not self.isPaused:
-                # after the video finished, the play button stills shows
-                # "Pause", not the desired behavior of a media player
-                # this will fix it
-                self.Stop()
+        self.pi_response_file = open(self.pi_response_path + '/' + self.pi_response_id + '-' + os.path.splitext(os.path.basename(str(filename)))[0]+ '.csv', 'w')
 
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
-    player = Player()
+    player = PIRecorder()
     player.show()
-    player.resize(640, 480)
-    if sys.argv[1:]:
+    player.resize(800, 600)
+    if sys.argv[1:]:    # videofile
         player.OpenFile(sys.argv[1])
+        player.response_id = sys.argv[2]
+        player.response_path = sys.argv[3]
+    else:
+        player.OpenFile(None)
     sys.exit(app.exec_())
