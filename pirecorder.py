@@ -22,6 +22,7 @@
 
 from __future__ import division, print_function
 
+import argparse
 import os.path
 import sys
 import time
@@ -31,68 +32,75 @@ import vlc
 from PyQt4 import QtGui, QtCore
 
 class PIRecorder(QtGui.QMainWindow):
-    """Parasocial Interaction Recorder."""
+    '''Parasocial Interaction Recorder.'''
 
-    def __init__(self, master=None, participant_id='dummy', response_path='.'):
+    def __init__(self, participant_id, output_path, verbose=False, master=None):
         QtGui.QMainWindow.__init__(self, master)
         self.setWindowTitle("PIRecorder")
 
         self.instance = vlc.Instance()
         self.mediaplayer = self.instance.media_player_new()
 
-        self.createUI()
-        self.pi_response_path = response_path
-        self.pi_response_id = participant_id
-        self.pi_response_file = None
-        self.video_start_time = 0
-        self.pi_response_counter = 0
+        self.create_ui()
 
-    def createUI(self):
+        self._output_path = output_path
+        self._participant_id = participant_id
+        self._verbose = verbose
+        
+        self._output_file = None
+        
+        self._t_video_started = 0
+        self._is_playing = False
+        self._response_counter = 0
+
+    def create_ui(self):
         self.widget = QtGui.QWidget(self)
         self.setCentralWidget(self.widget)
 
-        if sys.platform == "darwin":
+        if sys.platform == 'darwin':
             self.videoframe = QtGui.QMacCocoaViewContainer(0)
         else:
             self.videoframe = QtGui.QFrame()
+
         self.palette = self.videoframe.palette()
-        self.palette.setColor (QtGui.QPalette.Window,
-                               QtGui.QColor(0,0,0))
+        self.palette.setColor(QtGui.QPalette.Window, QtGui.QColor(0,0,0))
         self.videoframe.setPalette(self.palette)
         self.videoframe.setAutoFillBackground(True)
 
-        self.hbuttonbox = QtGui.QHBoxLayout()
-        self.playbutton = QtGui.QPushButton("Play")
-        self.hbuttonbox.addWidget(self.playbutton)
-        self.connect(self.playbutton, QtCore.SIGNAL("clicked()"),
-                     self.Play)
+        self.label = QtGui.QPushButton('Press any key to start')
+        #self.label.setAlignment(QtCore.Qt.AlignCenter)
+        self.label.setStyleSheet("font: 18pt;");
 
-        self.vboxlayout = QtGui.QVBoxLayout()
-        self.vboxlayout.addWidget(self.videoframe)
-        self.vboxlayout.addLayout(self.hbuttonbox)
-
-        self.widget.setLayout(self.vboxlayout)
+        self.layout = QtGui.QVBoxLayout()
+        self.layout.addWidget(self.videoframe)
+        self.layout.addWidget(self.label)
+        self.widget.setLayout(self.layout)
 
     def keyPressEvent(self, event):
-        if self.video_start_time == 0:
-            return
-        if not event.isAutoRepeat(): 
-            self.pi_response_counter += 1
-            response_time = time.time() - self.video_start_time
-            self.pi_response_file.write('{}, {}, {}\n'.format(self.pi_response_counter, response_time, event.key()))
-            self.pi_response_file.flush()
+        if not self._is_playing:
+            self.play()
+        else:
+            if not event.isAutoRepeat(): 
+                self._response_counter += 1
+                t_keypress = time.time() - self._t_video_started
+                output = '{}, {}, {}\n'.format(self._response_counter, t_keypress, event.key())
+                self._output_file.write(output)
+                self._output_file.flush()
+                if self._verbose:
+                    print(output)
 
-    def Play(self):
+    def play(self):
         """play"""
         self.mediaplayer.play()
-        self.video_start_time = time.time()
-        self.playbutton.setVisible(False)
+        self._t_video_started = time.time()
+        self._is_playing = True
+        self.label.setVisible(False)
 
-    def OpenFile(self, filename=None):
+    def open_file(self, filename=None):
         if filename is None:
             filename = QtGui.QFileDialog.getOpenFileName(self, "Open File", user.home)
         if not filename:
-            sys.exit(-1)
+            sys.exit()
 
         self.media = self.instance.media_new(unicode(filename))
         self.mediaplayer.set_media(self.media)
@@ -105,17 +113,35 @@ class PIRecorder(QtGui.QMainWindow):
         elif sys.platform == "darwin": # for MacOS
             self.mediaplayer.set_nsobject(self.videoframe.winId())
 
-        self.pi_response_file = open(self.pi_response_path + '/' + self.pi_response_id + '-' + os.path.splitext(os.path.basename(str(filename)))[0]+ '.csv', 'w')
+        self._output_file = open(self._output_path + '/' + self._participant_id + '-' + os.path.splitext(os.path.basename(str(filename)))[0]+ '.csv', 'w')
 
-if __name__ == "__main__":
+    def clean_up(self):
+        self._output_file.close()
+
+def main():
+    parser = argparse.ArgumentParser(description='Keystroke based parasocial interaction recorder.')
+    parser.add_argument('-m', '--maximised', dest='maximised', action='store_true')#, default=True, type=bool)
+    parser.add_argument('-f', '--media-file', dest='filename', default=None)
+    parser.add_argument('-pid', '--participant-id', dest='participant_id', default='dummy')
+    parser.add_argument('-o', '--out-path', dest='out_path', default='.')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
+    args = parser.parse_args()
+
     app = QtGui.QApplication(sys.argv)
-    player = PIRecorder()
-    player.show()
-    player.resize(800, 600)
-    if sys.argv[1:]:    # videofile
-        player.OpenFile(sys.argv[1])
-        player.response_id = sys.argv[2]
-        player.response_path = sys.argv[3]
+    pir = PIRecorder(
+        participant_id=args.participant_id,
+        output_path=args.out_path,
+        verbose=args.verbose)
+    pir.show()
+
+    if args.maximised:
+        pir.showMaximized()
     else:
-        player.OpenFile(None)
-    sys.exit(app.exec_())
+        pir.resize(800,600)
+    pir.open_file(args.filename)
+    ret = app.exec_()
+    pir.clean_up()
+    sys.exit(ret)
+
+if __name__ == '__main__':
+    main()
