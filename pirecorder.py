@@ -26,16 +26,15 @@ import argparse
 import os.path
 import sys
 import time
-import user
 
 import vlc
-from PyQt4 import QtGui, QtCore
+from PyQt5 import QtCore, QtGui, QtWidgets
 
-class PIRecorder(QtGui.QMainWindow):
+class PIRecorder(QtWidgets.QMainWindow):
     '''Parasocial Interaction Recorder.'''
 
     def __init__(self, participant_id, output_path, verbose=False, master=None):
-        QtGui.QMainWindow.__init__(self, master)
+        QtWidgets.QMainWindow.__init__(self, master)
         self.setWindowTitle("PIRecorder")
 
         self.instance = vlc.Instance()
@@ -54,24 +53,24 @@ class PIRecorder(QtGui.QMainWindow):
         self._response_counter = 0
 
     def create_ui(self):
-        self.widget = QtGui.QWidget(self)
+        self.widget = QtWidgets.QWidget(self)
         self.setCentralWidget(self.widget)
 
         if sys.platform == 'darwin':
-            self.videoframe = QtGui.QMacCocoaViewContainer(0)
+            self.videoframe = QtWidgets.QMacCocoaViewContainer(0)
         else:
-            self.videoframe = QtGui.QFrame()
+            self.videoframe = QtWidgets.QFrame()
 
         self.palette = self.videoframe.palette()
         self.palette.setColor(QtGui.QPalette.Window, QtGui.QColor(0,0,0))
         self.videoframe.setPalette(self.palette)
         self.videoframe.setAutoFillBackground(True)
 
-        self.label = QtGui.QPushButton('Press any key to start')
+        self.label = QtWidgets.QPushButton('Press any key to start')
         #self.label.setAlignment(QtCore.Qt.AlignCenter)
         self.label.setStyleSheet("font: 18pt;");
 
-        self.layout = QtGui.QVBoxLayout()
+        self.layout = QtWidgets.QVBoxLayout()
         self.layout.addWidget(self.videoframe)
         self.layout.addWidget(self.label)
         self.widget.setLayout(self.layout)
@@ -98,11 +97,10 @@ class PIRecorder(QtGui.QMainWindow):
 
     def open_file(self, filename=None):
         if filename is None:
-            filename = QtGui.QFileDialog.getOpenFileName(self, "Open File", user.home)
+            filename = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", os.path.expanduser('~'))
         if not filename:
             sys.exit()
-
-        self.media = self.instance.media_new(unicode(filename))
+        self.media = self.instance.media_new(filename[0])
         self.mediaplayer.set_media(self.media)
         self.media.parse()
 
@@ -118,6 +116,18 @@ class PIRecorder(QtGui.QMainWindow):
     def clean_up(self):
         self._output_file.close()
 
+def print_version():
+    """Print version of this vlc.py and of the libvlc"""
+    try:
+        print('Build date: %s (%#x)' % (vlc.build_date, vlc.hex_version()))
+        print('LibVLC version: %s (%#x)' % (vlc.bytes_to_str(vlc.libvlc_get_version()), vlc.libvlc_hex_version()))
+        print('LibVLC compiler: %s' % vlc.bytes_to_str(vlc.libvlc_get_compiler()))
+        if vlc.plugin_path:
+            print('Plugin path: %s' % vlc.plugin_path)
+    except:
+        print('Error: %s' % sys.exc_info()[1])
+
+
 def main():
     parser = argparse.ArgumentParser(description='Keystroke based parasocial interaction recorder.')
     parser.add_argument('-m', '--maximised', dest='maximised', action='store_true')#, default=True, type=bool)
@@ -127,7 +137,9 @@ def main():
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     args = parser.parse_args()
 
-    app = QtGui.QApplication(sys.argv)
+    print_version()
+
+    app = QtWidgets.QApplication(sys.argv)
     pir = PIRecorder(
         participant_id=args.participant_id,
         output_path=args.out_path,
