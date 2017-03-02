@@ -97,10 +97,10 @@ class PIRecorder(QtWidgets.QMainWindow):
 
     def open_file(self, filename=None):
         if filename is None:
-            filename = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", os.path.expanduser('~'))
+            filename = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", os.path.expanduser('~'))[0]
         if not filename:
             sys.exit()
-        self.media = self.instance.media_new(filename[0])
+        self.media = self.instance.media_new(filename)
         self.mediaplayer.set_media(self.media)
         self.media.parse()
 
