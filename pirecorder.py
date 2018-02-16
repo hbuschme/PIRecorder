@@ -85,7 +85,7 @@ class PIRecorder(QtGui.QMainWindow):
             self.play()
         elif self._is_paused:
             self.resume()
-        elif event.key() == 80:
+        elif event.key() == QtCore.Qt.Key_P:
             self.pause()
         else:
             if not event.isAutoRepeat(): 
