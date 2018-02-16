@@ -51,7 +51,9 @@ class PIRecorder(QtGui.QMainWindow):
         
         self._t_video_started = 0
         self._is_playing = False
+        self._is_paused = False
         self._response_counter = 0
+        self._total_pause_dur = 0
 
     def create_ui(self):
         self.widget = QtGui.QWidget(self)
@@ -67,22 +69,28 @@ class PIRecorder(QtGui.QMainWindow):
         self.videoframe.setPalette(self.palette)
         self.videoframe.setAutoFillBackground(True)
 
-        self.label = QtGui.QPushButton('Press any key to start')
+        self.label_start = QtGui.QPushButton('Press any key to start')
+        self.label_cont = QtGui.QPushButton('Press any key to continue')
         #self.label.setAlignment(QtCore.Qt.AlignCenter)
-        self.label.setStyleSheet("font: 18pt;");
+        self.label_start.setStyleSheet("font: 18pt;");
+        self.label_cont.setStyleSheet("font: 18pt;");
 
         self.layout = QtGui.QVBoxLayout()
         self.layout.addWidget(self.videoframe)
-        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.label_start)
         self.widget.setLayout(self.layout)
 
     def keyPressEvent(self, event):
         if not self._is_playing:
             self.play()
+        elif self._is_paused:
+            self.resume()
+        elif event.key() == 80:
+            self.pause()
         else:
             if not event.isAutoRepeat(): 
                 self._response_counter += 1
-                t_keypress = time.time() - self._t_video_started
+                t_keypress = time.time() - self._t_video_started - self._total_pause_dur
                 output = '{}, {}, {}\n'.format(self._response_counter, t_keypress, event.key())
                 self._output_file.write(output)
                 self._output_file.flush()
@@ -94,7 +102,24 @@ class PIRecorder(QtGui.QMainWindow):
         self.mediaplayer.play()
         self._t_video_started = time.time()
         self._is_playing = True
-        self.label.setVisible(False)
+        self.label_start.setVisible(False)
+
+    def pause(self):
+        """pause"""
+        self.mediaplayer.pause()
+        self._t_video_paused = time.time()
+        self._is_paused = True
+        self.label_cont.setVisible(True)
+        self.layout.addWidget(self.label_cont)
+        self.widget.setLayout(self.layout)
+
+    def resume(self):
+        """resume after pause"""
+        self.mediaplayer.play()
+        self._total_pause_dur += time.time() - self._t_video_paused
+        self._t_video_paused = None
+        self._is_paused = False
+        self.label_cont.setVisible(False)
 
     def open_file(self, filename=None):
         if filename is None:
